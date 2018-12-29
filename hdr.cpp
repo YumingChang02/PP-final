@@ -38,7 +38,30 @@ void load_exposures( string source_dir, uint8_t **img_list_b, uint8_t **img_list
 				if( input_pic.data ){
 					vector<Mat> channels;
 					split( input_pic, channels );
-					cout << channels[0] << endl;
+					//cout << channels[0] << endl;
+					if( ( *row_input ) == 0 && ( *col_input ) == 0 ){
+						cout << "allocating area for input pictures" << pic_count << endl;
+						( *row_input ) = input_pic.rows;
+						( *col_input ) = input_pic.cols;
+						distance = ( *row_input ) * ( *col_input );
+						*img_list_b = new uint8_t[ ( *row_input ) * ( *col_input ) * pic_count ];
+						*img_list_g = new uint8_t[ ( *row_input ) * ( *col_input ) * pic_count ];
+						*img_list_r = new uint8_t[ ( *row_input ) * ( *col_input ) * pic_count ];
+						// *small_b = new uint8_t[ SMALLPIXELS * pic_count ];
+						// *small_g = new uint8_t[ SMALLPIXELS * pic_count ];
+						// *small_r = new uint8_t[ SMALLPIXELS * pic_count ];
+						//cout << "Picture size is : " << distance << " " << channels[0].total() << endl;
+					}
+					cout << "Reading " << pointer + 1 << "th picture to memory" << endl;
+					unsigned offset = pointer * distance;
+					memcpy( ( *img_list_b ) + offset, channels[0].data, channels[0].total() );
+					memcpy( ( *img_list_g ) + offset, channels[1].data, channels[1].total() );
+					memcpy( ( *img_list_r ) + offset, channels[2].data, channels[2].total() );
+					cout << distance << endl;
+					for( unsigned i = offset ; i < distance + offset ; ++i ){
+						cout << (int)( *img_list_b )[i] << " " << (int)( *img_list_g )[i] << " " << (int)( *img_list_r )[i] << " " << endl;
+					}
+					pointer++;
 				}
 			}
 		}
@@ -48,12 +71,6 @@ void load_exposures( string source_dir, uint8_t **img_list_b, uint8_t **img_list
 }
 
 int main( int argc, char* argv[] ){
-	if( argc != 3 ){
-		cerr << "[Usage] hdr <input img dir> <output .hdr name> <original picture count> \n[Example] hdr taipei taipei.hdr" << endl;
-		return 0;
-	}
-	string img_dir = argv[1];
-	string output_name = argv[2];
 
 	/* ------------ variables ------------ */
 	uint8_t *img_list_b, *img_list_g, *img_list_r;
@@ -62,8 +79,17 @@ int main( int argc, char* argv[] ){
 	int *exposure_log2;
 	unsigned row, col, pic_count;
 
+	if( argc != 4 ){
+		cerr << "[Usage] hdr <input img dir> <output .hdr name> <original picture count> \n[Example] hdr taipei taipei.hdr 11" << endl;
+		return 0;
+	}
+	string img_dir = argv[1];
+	string output_name = argv[2];
+	pic_count = atoi( argv[3] );
+
 	cout << "reading input images ... " << endl;
 
+	row = col = 0;
 	load_exposures( img_dir, &img_list_b, &img_list_g, &img_list_r, &small_b, &small_g, &small_r, exposure_log2, &row, &col, pic_count );
 
 	//delete[] img_list_b;
