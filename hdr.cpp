@@ -55,9 +55,9 @@ void load_exposures( string source_dir, uint8_t **img_list_b, uint8_t **img_list
 					vector<Mat> channels;
 					split( input_pic, channels );
 					unsigned offset = pointer * distance;
-					memcpy( ( *img_list_b ) + offset, channels[0].data, channels[0].total() );
-					memcpy( ( *img_list_g ) + offset, channels[1].data, channels[1].total() );
-					memcpy( ( *img_list_r ) + offset, channels[2].data, channels[2].total() );
+					memcpy( ( *img_list_b ) + offset, channels[0].data, channels[0].total() * sizeof( uint8_t ) );
+					memcpy( ( *img_list_g ) + offset, channels[1].data, channels[1].total() * sizeof( uint8_t ) );
+					memcpy( ( *img_list_r ) + offset, channels[2].data, channels[2].total() * sizeof( uint8_t ) );
 
 					// getting 10 * 10 resized image from original image
 					Mat small;
@@ -65,9 +65,9 @@ void load_exposures( string source_dir, uint8_t **img_list_b, uint8_t **img_list
 					vector<Mat> small_channels;
 					split( small, small_channels );
 					offset = pointer * SMALLPIXELS;
-					memcpy( ( *small_b ) + offset, small_channels[0].data, small_channels[0].total() );
-					memcpy( ( *small_g ) + offset, small_channels[1].data, small_channels[1].total() );
-					memcpy( ( *small_r ) + offset, small_channels[2].data, small_channels[2].total() );
+					memcpy( ( *small_b ) + offset, small_channels[0].data, small_channels[0].total() * sizeof( uint8_t ) );
+					memcpy( ( *small_g ) + offset, small_channels[1].data, small_channels[1].total() * sizeof( uint8_t ) );
+					memcpy( ( *small_r ) + offset, small_channels[2].data, small_channels[2].total() * sizeof( uint8_t ) );
 
 					//for( unsigned i = offset ; i < distance + offset ; ++i ){
 					//	cout << (int)( *img_list_b )[i] << " " << (int)( *img_list_g )[i] << " " << (int)( *img_list_r )[i] << " " << endl;
