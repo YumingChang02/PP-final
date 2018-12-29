@@ -37,7 +37,6 @@ void load_exposures( string source_dir, uint8_t **img_list_b, uint8_t **img_list
 				Mat input_pic = imread( temp, CV_LOAD_IMAGE_COLOR);
 				if( input_pic.data ){
 					if( ( *row_input ) == 0 && ( *col_input ) == 0 ){
-						cout << "allocating area for input pictures" << pic_count << endl;
 						( *row_input ) = input_pic.rows;
 						( *col_input ) = input_pic.cols;
 						distance = ( *row_input ) * ( *col_input );
@@ -50,7 +49,7 @@ void load_exposures( string source_dir, uint8_t **img_list_b, uint8_t **img_list
 						*exposure_log2 = new int[ pic_count ];
 						//cout << "Picture size is : " << distance << " " << channels[0].total() << endl;
 					}
-					cout << "Reading " << pointer + 1 << "th picture to memory" << endl;
+					// cout << "Reading " << pointer + 1 << "th picture to memory" << endl;
 
 					// saving picture by channel
 					vector<Mat> channels;
@@ -73,6 +72,12 @@ void load_exposures( string source_dir, uint8_t **img_list_b, uint8_t **img_list
 					//for( unsigned i = offset ; i < distance + offset ; ++i ){
 					//	cout << (int)( *img_list_b )[i] << " " << (int)( *img_list_g )[i] << " " << (int)( *img_list_r )[i] << " " << endl;
 					//}
+
+					float exposure;
+					iss >> exposure;
+					( *exposure_log2 )[ pointer ] = log2( exposure );
+					// cout << ( *exposure_log2 )[ pointer ] << endl;
+
 					pointer++;
 				}
 			}
