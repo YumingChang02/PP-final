@@ -87,11 +87,18 @@ void load_exposures( string source_dir, uint8_t **img_list_b, uint8_t **img_list
 	return;
 }
 
+void response_curve_solver( uint8_t *Z, int *B, int l, int *w, double **g, int pic_count ){
+	int n = 256;
+	double A[ ( pic_count * SMALLPIXELS + n + 1 ) * ( SMALLPIXELS + n ) ] = {0};
+	double b[ pic_count * SMALLPIXELS + n + 1 ] = {0};
+}
+
 int main( int argc, char* argv[] ){
 
 	/* ------------ variables ------------ */
 	uint8_t *img_list_b, *img_list_g, *img_list_r;
 	uint8_t *small_b, *small_g, *small_r;
+	double *gb, *gg, *gr;
 
 	int *exposure_log2;
 	unsigned row, col, pic_count;
@@ -104,10 +111,27 @@ int main( int argc, char* argv[] ){
 	string output_name = argv[2];
 	pic_count = atoi( argv[3] );
 
-	cout << "reading input images ... " << endl;
-
 	row = col = 0;
+
+	/* ------------ load picture and small reference input ------------ */
+	cout << "reading input images ... " << endl;
 	load_exposures( img_dir, &img_list_b, &img_list_g, &img_list_r, &small_b, &small_g, &small_r, &exposure_log2, &row, &col, pic_count );
+	cout << "done" << endl;
+
+	/* ------------ solve response curves ------------ */
+	cout << "Solving response curves ... " << endl;
+
+	int *w = new int[ 256 ];
+	for( int i = 0; i < 128; ++i ){
+		w[       i ] = i;
+		w[ i + 128 ] = 255 - i;
+	}
+
+	response_curve_solver( small_b, exposure_log2, CONSTANTL, w, &gb, pic_count );
+	response_curve_solver( small_g, exposure_log2, CONSTANTL, w, &gg, pic_count );
+	response_curve_solver( small_r, exposure_log2, CONSTANTL, w, &gr, pic_count );
+
+	cout << "done" << endl;
 
 	delete[] img_list_b;
 	delete[] img_list_g;
@@ -118,4 +142,6 @@ int main( int argc, char* argv[] ){
 	delete[] small_r;
 
 	delete[] exposure_log2;
+
+	delete[] w;
 }
