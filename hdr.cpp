@@ -90,11 +90,13 @@ void load_exposures( string source_dir, uint8_t **img_list_b, uint8_t **img_list
 
 void response_curve_solver( uint8_t *Z, int *B, int l, int *w, double **g, int pic_count ){
 	int n = 256;
-	double A[ ( pic_count * SMALLPIXELS + n + 1 ) * ( SMALLPIXELS + n ) ] = {0};
-	double b[ pic_count * SMALLPIXELS + n + 1 ] = {0};
+	const unsigned  width_a = SMALLPIXELS + n;
+	const unsigned height_a = pic_count * SMALLPIXELS + n + 1;
+
+	double A[ ( height_a ) * ( width_a ) ] = {0};
+	double b[ height_a ] = {0};
 
 	int k = 0;
-	const unsigned width_a = SMALLPIXELS + n;
 	for( int i = 0; i < SMALLPIXELS; ++i ){
 		for( int j = 0; j < pic_count; ++j ){
 			uint8_t z = Z[j * SMALLPIXELS + i];
@@ -117,22 +119,20 @@ void response_curve_solver( uint8_t *Z, int *B, int l, int *w, double **g, int p
 	}
 
 	// lstsq @@
-	double *temp = new double[ SMALLPIXELS + n ];
+	double *temp = new double[ height_a ];
 	double rcond = -1.0;
 	int rank, info;
-	info = LAPACKE_dgelsd( LAPACK_ROW_MAJOR, pic_count * SMALLPIXELS + n + 1, SMALLPIXELS + n, 1, A, SMALLPIXELS + n, b, 1, temp, rcond, &rank );
+	info = LAPACKE_dgelsd( LAPACK_ROW_MAJOR, height_a, width_a, 1, A, width_a, b, 1, temp, rcond, &rank );
         /* Check for convergence */
 	if( info > 0 ) {
-		printf( "The algorithm computing SVD failed to converge;\n" );
-		printf( "the least squares solution could not be computed.\n" );
+		cout << "The algorithm computing SVD failed to converge;" << endl;
+		cout << "the least squares solution could not be computed." << endl;
 		exit( 1 );
 	}
-	for( int i = 0 ; i < 1 ; ++i ){
-		for( int j = 0; j < SMALLPIXELS + n; ++j ){
-			cout << b[ i * ( SMALLPIXELS + n ) + j ] << " ";
-		}
-		cout << endl;
-	}
+
+	*g = new double[ 256 ];
+	memcpy( ( *g ), temp, 256 * sizeof( double ) );
+
 	delete[] temp;
 }
 
