@@ -131,9 +131,24 @@ void response_curve_solver( uint8_t *Z, int *B, int l, int *w, double **g, int p
 	}
 
 	*g = new double[ 256 ];
-	memcpy( ( *g ), temp, 256 * sizeof( double ) );
+	memcpy( ( *g ), b, 256 * sizeof( double ) );
 
 	delete[] temp;
+}
+
+void construct_radiance_map( int img_size, int pic_count, int offset, double *response_curve, uint8_t *img_list, int *exposure_log2, int *w, float *ln_E ){
+	float acc_E[ img_size ]={0};
+	for( int i = 0; i < img_size; ++i ){
+		float acc_w = 0;
+		for( int j = 0; j < pic_count; ++j ){
+			uint8_t z = img_list[ j * img_size + i ];
+			acc_E[ i ] += w[ z ]*( response_curve[ z ] - exposure_log2[ j ] );
+			acc_w += w[ z ];
+		}
+		//cout << i << " : " << acc_E[ i ] << " " << acc_w << endl;
+		ln_E[ i + offset ] = ( acc_w > 0 )? ( acc_E[ i ] / acc_w ) : ( acc_E[i] ); // may need to add exp here
+		acc_w = 0;
+	}
 }
 
 int main( int argc, char* argv[] ){
