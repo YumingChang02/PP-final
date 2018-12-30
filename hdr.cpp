@@ -105,7 +105,7 @@ void response_curve_solver( uint8_t *Z, int *B, int l, int *w, double **g, int p
 			++k;
 		}
 	}
-	
+
 	A[ k * width_a + 128 ] = 1;
 	++k;
 
@@ -115,8 +115,25 @@ void response_curve_solver( uint8_t *Z, int *B, int l, int *w, double **g, int p
 		A[ k * width_a + i + 2 ] = l * w[ i + 1 ];
 		k++;
 	}
-	
+
 	// lstsq @@
+	double *temp = new double[ SMALLPIXELS + n ];
+	double rcond = -1.0;
+	int rank, info;
+	info = LAPACKE_dgelsd( LAPACK_ROW_MAJOR, pic_count * SMALLPIXELS + n + 1, SMALLPIXELS + n, 1, A, SMALLPIXELS + n, b, 1, temp, rcond, &rank );
+        /* Check for convergence */
+	if( info > 0 ) {
+		printf( "The algorithm computing SVD failed to converge;\n" );
+		printf( "the least squares solution could not be computed.\n" );
+		exit( 1 );
+	}
+	for( int i = 0 ; i < 1 ; ++i ){
+		for( int j = 0; j < SMALLPIXELS + n; ++j ){
+			cout << b[ i * ( SMALLPIXELS + n ) + j ] << " ";
+		}
+		cout << endl;
+	}
+	delete[] temp;
 }
 
 int main( int argc, char* argv[] ){
@@ -150,7 +167,7 @@ int main( int argc, char* argv[] ){
 	int *w = new int[ 256 ];
 	for( int i = 0; i < 128; ++i ){
 		w[       i ] = i;
-		w[ i + 128 ] = 255 - i;
+		w[ i + 128 ] = 127 - i;
 	}
 
 	response_curve_solver( small_b, exposure_log2, CONSTANTL, w, &gb, pic_count );
