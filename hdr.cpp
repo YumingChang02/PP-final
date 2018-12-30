@@ -13,6 +13,7 @@
 #include <math.h>
 
 #define CONSTANTL 50
+#define SMALLDIM 10
 #define SMALLPIXELS 100
 
 using namespace std;
@@ -61,7 +62,7 @@ void load_exposures( string source_dir, uint8_t **img_list_b, uint8_t **img_list
 
 					// getting 10 * 10 resized image from original image
 					Mat small;
-					resize( input_pic, small, cv::Size( 10, 10 ), 0, 0 );
+					resize( input_pic, small, cv::Size( SMALLDIM, SMALLDIM ), 0, 0 );
 					vector<Mat> small_channels;
 					split( small, small_channels );
 					offset = pointer * SMALLPIXELS;
@@ -91,6 +92,31 @@ void response_curve_solver( uint8_t *Z, int *B, int l, int *w, double **g, int p
 	int n = 256;
 	double A[ ( pic_count * SMALLPIXELS + n + 1 ) * ( SMALLPIXELS + n ) ] = {0};
 	double b[ pic_count * SMALLPIXELS + n + 1 ] = {0};
+
+	int k = 0;
+	const unsigned width_a = SMALLPIXELS + n;
+	for( int i = 0; i < SMALLPIXELS; ++i ){
+		for( int j = 0; j < pic_count; ++j ){
+			uint8_t z = Z[j * SMALLPIXELS + i];
+			int wij = w[z];
+			A[     k * width_a + z ] = wij;
+			A[ k * width_a + n + i ] = -wij;
+			b[                   k ] = wij * B[ j ];
+			++k;
+		}
+	}
+	
+	A[ k * width_a + 128 ] = 1;
+	++k;
+
+	for( int i = 0; i < n - 1; ++i ){
+		A[     k * width_a + i ] = l * w[ i + 1 ];
+		A[ k * width_a + i + 1 ] = l * w[ i + 1 ] * ( -2 );
+		A[ k * width_a + i + 2 ] = l * w[ i + 1 ];
+		k++;
+	}
+	
+	// lstsq @@
 }
 
 int main( int argc, char* argv[] ){
