@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <cstring>
 #include <sstream>
+#include <chrono>
 #include <limits>
 #include <vector>
 #include <math.h>
@@ -37,7 +38,6 @@ void load_exposures( string source_dir, uint8_t **img_list_b, uint8_t **img_list
 			if( temp[0] != '#' ){
 				istringstream iss( source_dir + "/" + temp );
 				iss >> temp;
-				cout << temp << endl;
 				Mat input_pic = imread( temp, CV_LOAD_IMAGE_COLOR);
 				if( input_pic.data ){
 					if( ( *row_input ) == 0 && ( *col_input ) == 0 ){
@@ -77,11 +77,6 @@ void load_exposures( string source_dir, uint8_t **img_list_b, uint8_t **img_list
 
 					pointer++;
 				}
-			}
-			else{
-				istringstream iss( temp );
-				iss >> temp;
-				cout << temp << endl;
 			}
 		}
 	}
@@ -147,7 +142,6 @@ void construct_radiance_map( int img_size, int pic_count, int offset, double *g,
 			acc_w += w[ z ];
 		}
 		ln_E[ i * 3 + offset ] = ( acc_w > 0 )? exp( acc_E[ i ] / acc_w ) : exp( acc_E[i] );
-		acc_w = 0;
 	}
 }
 
@@ -167,18 +161,21 @@ int main( int argc, char* argv[] ){
 	}
 	string img_dir = argv[1];
 	string output_name = argv[2];
-	
+
 	/* ------------ count pictures in folder ------------ */
 
 	row = col = 0;
 
 	/* ------------ load picture and small reference input ------------ */
 	cout << "reading input images ... " << endl;
+	auto start = std::chrono::high_resolution_clock::now();
 	load_exposures( img_dir, &img_list_b, &img_list_g, &img_list_r, &small_b, &small_g, &small_r, &exposure_log2, &row, &col, &pic_count );
-	cout << "done" << endl;
+	auto finish = std::chrono::high_resolution_clock::now();
+	cout << "done in : " << std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count() << "ns\n";
 
 	/* ------------ solve response curves ------------ */
 	cout << "Solving response curves ... " << endl;
+	start = std::chrono::high_resolution_clock::now();
 
 	int *w = new int[ 256 ];
 	for( int i = 0; i < 128; ++i ){
@@ -190,9 +187,11 @@ int main( int argc, char* argv[] ){
 	response_curve_solver( small_g, exposure_log2, CONSTANTL, w, &gg, pic_count );
 	response_curve_solver( small_r, exposure_log2, CONSTANTL, w, &gr, pic_count );
 
-	cout << "done" << endl;
-	
+	finish = std::chrono::high_resolution_clock::now();
+	cout << "done in : " << std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count() << "ns\n";
+
 	/* ------------ solve response curves ------------ */
+	start = std::chrono::high_resolution_clock::now();
 	unsigned img_size = row * col;
 	float hdr[ img_size * 3 ] = {0};
 	cout << "Constructing radiance map for Blue channel .... " << endl;
@@ -201,8 +200,11 @@ int main( int argc, char* argv[] ){
 	construct_radiance_map( img_size, pic_count, 1, gg, img_list_g, exposure_log2, w, hdr );
 	cout << "Constructing radiance map for Red channel .... " << endl;
 	construct_radiance_map( img_size, pic_count, 2, gr, img_list_r, exposure_log2, w, hdr );
-	cout << "done" << endl;
+	finish = std::chrono::high_resolution_clock::now();
+	cout << "done in : " << std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count() << "ns\n";
 
+	start = std::chrono::high_resolution_clock::now();
+	cout << "Writing hdr image .... " << endl;
 	/* ------------ Saving HDR image ------------ */
 	ofstream f;
 	f.open( output_name, ios::out | ios::binary );
@@ -218,7 +220,6 @@ int main( int argc, char* argv[] ){
 		}
 
 		// find max bright value
-		cout << img_size << endl;
 		//uint8_t rbge[ img_size * 4 ] = {0};
 		for( unsigned i = 0; i < img_size; ++i ){
 			float brightest;
@@ -240,7 +241,9 @@ int main( int argc, char* argv[] ){
 		cout << "Error creating file" << endl;
 	}
 	f.close();
-	
+	finish = std::chrono::high_resolution_clock::now();
+	cout << "done in : " << std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count() << "ns\n";
+
 	delete[] img_list_b;
 	delete[] img_list_g;
 	delete[] img_list_r;
@@ -248,6 +251,9 @@ int main( int argc, char* argv[] ){
 	delete[] small_b;
 	delete[] small_g;
 	delete[] small_r;
+	delete[] gb;
+	delete[] gg;
+	delete[] gr;
 
 	delete[] exposure_log2;
 

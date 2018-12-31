@@ -1,4 +1,5 @@
-# HDR imaging ( Modified from https://github.com/SSARCandy/HDR-imaging )
+# HDR imaging
+## ( Modified from https://github.com/SSARCandy/HDR-imaging )
 
 
 ## Requirement
