@@ -1,3 +1,4 @@
+16
 # Filename          exposure  1/shutter_speed f/stop gain(db) ND_filters
 memorial0061.png    32               0.03125 8 0 0
 memorial0062.png    16               0.0625  8 0 0

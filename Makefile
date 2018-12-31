@@ -1,6 +1,6 @@
 CC    := g++
 EXE    = hdr
-FLAGS  = -std=c++11 -O2 -llapacke -llapack -lblas -lm -Wall
+FLAGS  = -std=c++11 -O2 -llapacke -llapack -lm -Wall
 OPENCV = -lopencv_highgui -lopencv_core -lopencv_imgproc -lopencv_imgcodecs
 
 all  : hdr.cpp
@@ -9,8 +9,4 @@ all  : hdr.cpp
 .PHONY: clean run
 
 clean:
-	rm -f $(OBJs) $(EXE)
-
-run:
-	./hdr street street.hdr 11
-
+	rm -f $(EXE) $(wildcard *.hdr)

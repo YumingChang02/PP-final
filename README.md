@@ -1,26 +1,21 @@
-# HDR imaging
+# HDR imaging ( Modified from https://github.com/SSARCandy/HDR-imaging )
 
 
 ## Requirement
 
-- python3 (or higher)
+- C++ 11
 - opencv 3.0 (or higher)
-
-You will need to install some package using `pip3`:
-
-- numpy
-- matplotlib
+- lapack and lapacke
 
 ## Usage
 
 ```bash
-$ python HDR-playground.py <input img dir> <output .hdr name>
+$ make clean && make
+$ ./hdr <input img dir> <output .hdr name>
 
 # for example
-$ python ./HDR-playground.py taipei taipei.hdr
+$ ./hdr taipei taipei.hdr
 ```
-
-I also provide an jupyter version(`HDR-playground.ipynb`), it’s function is same as `HDR-playground.py`. jupyter is really convenient for develop python program!
 
 ## Input format
 
@@ -31,10 +26,12 @@ The input dir should have:
   - filename
   - exposure
   - 1/shutter_speed
+  - number of images in the folder ( at the very first line )
 
 This is an example for `image_list.txt`:
 
 ```
+10
 # Filename   exposure 1/shutter_speed
 DSC_0058.png 32        0.03125
 DSC_0059.png 16        0.0625
@@ -53,22 +50,7 @@ DSC_0067.png  0.0625  16
 The program will output:
 
 - A `.hdr` image
-- A reconstruct RGB response curve plot
-- A pseudo-color radiance map(with log value)
-
-for sample output, you can see [HDR-playground.ipynb](https://github.com/SSARCandy/HDR-imaging/blob/master/HDR-playground.ipynb) as reference.
-
-## Tonemap
-
-I use tmo for tonemapping, it implement 24 algorithms.  
-I write a script `tonemap.bat` for auto-run all 24 algorithms. 
-
-```bash
-$ tonemap.bat <filename without extension>
-```
-
-Make sure all `tm_*.exe` is in your system PATH
 
 ## Environment
 
-I test my code in Window10, but it should work fine in macOS/Linux(exclude tonemapping reference program need run in Windows)
+I test my code in Rock64 with Armbian 5.65 ( ubuntu 18.04 based ), but it should work fine in macOS/Linux/Windows ( maybe with some header swap to match opencv header on different OS )

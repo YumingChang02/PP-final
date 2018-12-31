@@ -1,3 +1,4 @@
+13
 # Filename   exposure 1/shutter_speed
 DSC_0078.png 16            0.0625
 DSC_0079.png  8            0.125

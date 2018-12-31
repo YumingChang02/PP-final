@@ -4,6 +4,7 @@
 #include "lapacke_utils.h"
 #include <iterator>
 #include <iostream>
+#include <dirent.h>
 #include <fstream>
 #include <cstdint>
 #include <cstring>
@@ -19,17 +20,19 @@
 using namespace std;
 using namespace cv;
 
-void load_exposures( string source_dir, uint8_t **img_list_b, uint8_t **img_list_g, uint8_t **img_list_r, uint8_t **small_b, uint8_t **small_g, uint8_t **small_r, int **exposure_log2, unsigned int *row_input, unsigned int *col_input, int pic_count ){
+void load_exposures( string source_dir, uint8_t **img_list_b, uint8_t **img_list_g, uint8_t **img_list_r, uint8_t **small_b, uint8_t **small_g, uint8_t **small_r, int **exposure_log2, unsigned int *row_input, unsigned int *col_input, unsigned *pic_count ){
 	fstream txt;
 	txt.open( source_dir + "/image_list.txt", fstream::in );
 	if( !txt ){
 		fprintf(stderr, "no image_list.txt found\n");
-		exit(EXIT_FAILURE);
+		exit( EXIT_FAILURE );
 	}
 	else{
 		string temp;
 		unsigned pointer = 0;
 		unsigned distance = 0;
+		getline( txt, temp );
+		( *pic_count ) = atoi( temp.c_str() );
 		while( getline( txt, temp ) ){
 			if( temp[0] != '#' ){
 				istringstream iss( source_dir + "/" + temp );
@@ -41,16 +44,14 @@ void load_exposures( string source_dir, uint8_t **img_list_b, uint8_t **img_list
 						( *row_input ) = input_pic.rows;
 						( *col_input ) = input_pic.cols;
 						distance = ( *row_input ) * ( *col_input );
-						*img_list_b = new uint8_t[ ( *row_input ) * ( *col_input ) * pic_count ];
-						*img_list_g = new uint8_t[ ( *row_input ) * ( *col_input ) * pic_count ];
-						*img_list_r = new uint8_t[ ( *row_input ) * ( *col_input ) * pic_count ];
-						*small_b = new uint8_t[ SMALLPIXELS * pic_count ];
-						*small_g = new uint8_t[ SMALLPIXELS * pic_count ];
-						*small_r = new uint8_t[ SMALLPIXELS * pic_count ];
-						*exposure_log2 = new int[ pic_count ];
-						//cout << "Picture size is : " << distance << " " << channels[0].total() << endl;
+						*img_list_b = new uint8_t[ ( *row_input ) * ( *col_input ) * ( *pic_count ) ];
+						*img_list_g = new uint8_t[ ( *row_input ) * ( *col_input ) * ( *pic_count ) ];
+						*img_list_r = new uint8_t[ ( *row_input ) * ( *col_input ) * ( *pic_count ) ];
+						*small_b = new uint8_t[ SMALLPIXELS * ( *pic_count ) ];
+						*small_g = new uint8_t[ SMALLPIXELS * ( *pic_count ) ];
+						*small_r = new uint8_t[ SMALLPIXELS * ( *pic_count ) ];
+						*exposure_log2 = new int[ ( *pic_count ) ];
 					}
-					// cout << "Reading " << pointer + 1 << "th picture to memory" << endl;
 
 					// saving picture by channel
 					vector<Mat> channels;
@@ -70,17 +71,17 @@ void load_exposures( string source_dir, uint8_t **img_list_b, uint8_t **img_list
 					memcpy( ( *small_g ) + offset, small_channels[1].data, small_channels[1].total() * sizeof( uint8_t ) );
 					memcpy( ( *small_r ) + offset, small_channels[2].data, small_channels[2].total() * sizeof( uint8_t ) );
 
-					//for( unsigned i = offset ; i < distance + offset ; ++i ){
-					//	cout << (int)( *img_list_b )[i] << " " << (int)( *img_list_g )[i] << " " << (int)( *img_list_r )[i] << " " << endl;
-					//}
-
 					float exposure;
 					iss >> exposure;
 					( *exposure_log2 )[ pointer ] = log2( exposure );
-					// cout << ( *exposure_log2 )[ pointer ] << endl;
 
 					pointer++;
 				}
+			}
+			else{
+				istringstream iss( temp );
+				iss >> temp;
+				cout << temp << endl;
 			}
 		}
 	}
@@ -123,11 +124,11 @@ void response_curve_solver( uint8_t *Z, int *B, int l, int *w, double **g, int p
 	double rcond = -1.0;
 	int rank, info;
 	info = LAPACKE_dgelsd( LAPACK_ROW_MAJOR, height_a, width_a, 1, A, width_a, b, 1, temp, rcond, &rank );
-        /* Check for convergence */
+	/* Check for convergence */
 	if( info > 0 ) {
-		cout << "The algorithm computing SVD failed to converge;" << endl;
-		cout << "the least squares solution could not be computed." << endl;
-		exit( 1 );
+		cerr << "The algorithm computing SVD failed to converge;" << endl;
+		cerr << "the least squares solution could not be computed." << endl;
+		exit( EXIT_FAILURE );
 	}
 
 	*g = new double[ 256 ];
@@ -145,8 +146,7 @@ void construct_radiance_map( int img_size, int pic_count, int offset, double *g,
 			acc_E[ i ] += w[ z ]*( g[ z ] - ln_t[ j ] );
 			acc_w += w[ z ];
 		}
-		//cout << i << " : " << acc_E[ i ] << " " << acc_w << endl;
-		ln_E[ i * 3 + offset ] = ( acc_w > 0 )? exp( acc_E[ i ] / acc_w ) : exp( acc_E[i] ); // may need to add exp here
+		ln_E[ i * 3 + offset ] = ( acc_w > 0 )? exp( acc_E[ i ] / acc_w ) : exp( acc_E[i] );
 		acc_w = 0;
 	}
 }
@@ -161,19 +161,20 @@ int main( int argc, char* argv[] ){
 	int *exposure_log2;
 	unsigned row, col, pic_count;
 
-	if( argc != 4 ){
-		cerr << "[Usage] hdr <input img dir> <output .hdr name> <original picture count> \n[Example] hdr taipei taipei.hdr 11" << endl;
+	if( argc != 3 ){
+		cerr << "[Usage] hdr <input img dir> <output .hdr name> \n[Example] hdr taipei taipei.hdr" << endl;
 		return 0;
 	}
 	string img_dir = argv[1];
 	string output_name = argv[2];
-	pic_count = atoi( argv[3] );
+	
+	/* ------------ count pictures in folder ------------ */
 
 	row = col = 0;
 
 	/* ------------ load picture and small reference input ------------ */
 	cout << "reading input images ... " << endl;
-	load_exposures( img_dir, &img_list_b, &img_list_g, &img_list_r, &small_b, &small_g, &small_r, &exposure_log2, &row, &col, pic_count );
+	load_exposures( img_dir, &img_list_b, &img_list_g, &img_list_r, &small_b, &small_g, &small_r, &exposure_log2, &row, &col, &pic_count );
 	cout << "done" << endl;
 
 	/* ------------ solve response curves ------------ */
@@ -223,21 +224,16 @@ int main( int argc, char* argv[] ){
 			float brightest;
 			float mantissa;
 			int exponent;
-			//cout << hdr[ i * 3 ] << " " << hdr[ i * 3 + 1 ] << " " << hdr[ i * 3 + 2 ] << " " << endl;
 			brightest = hdr[ i * 3 ];
 			if( brightest < hdr[ i * 3 + 1 ] ) brightest = hdr[ i * 3 + 1 ];
 			if( brightest < hdr[ i * 3 + 2 ] ) brightest = hdr[ i * 3 + 2 ];
 			mantissa = frexpf( brightest, &exponent );
 			// reuse mantissa for scaled mantissa
 			mantissa = mantissa * 256.0 / brightest;
-			//rbge[ i * 4 + 0 ] = ( uint8_t )round( hdr[ i * 3 + 2 ] * mantissa[i] );
-			//rbge[ i * 4 + 1 ] = ( uint8_t )round( hdr[ i * 3 + 1 ] * mantissa[i] );
-			//rbge[ i * 4 + 2 ] = ( uint8_t )round( hdr[ i * 3 + 0 ] * mantissa[i] );
-			//rbge[ i * 4 + 3 ] = ( uint8_t )round( exponent[i] + 128 );
-			f.put( ( uint8_t )round( hdr[ i * 3 + 2 ] * mantissa ) );
-			f.put( ( uint8_t )round( hdr[ i * 3 + 1 ] * mantissa ) );
-			f.put( ( uint8_t )round( hdr[ i * 3 + 0 ] * mantissa ) );
-			f.put( ( uint8_t )round( exponent + 128 ) );
+			f.put( ( uint8_t )round( hdr[ i * 3 + 2 ] * mantissa ) );	//rbge[ i * 4 + 0 ] = ( uint8_t )round( hdr[ i * 3 + 2 ] * mantissa[i] );
+			f.put( ( uint8_t )round( hdr[ i * 3 + 1 ] * mantissa ) );	//rbge[ i * 4 + 1 ] = ( uint8_t )round( hdr[ i * 3 + 1 ] * mantissa[i] );
+			f.put( ( uint8_t )round( hdr[ i * 3 + 0 ] * mantissa ) );	//rbge[ i * 4 + 2 ] = ( uint8_t )round( hdr[ i * 3 + 0 ] * mantissa[i] );
+			f.put( ( uint8_t )round( exponent + 128 ) );				//rbge[ i * 4 + 3 ] = ( uint8_t )round( exponent[i] + 128 );
 		}
 	}
 	else{
