@@ -136,17 +136,17 @@ void response_curve_solver( uint8_t *Z, int *B, int l, int *w, double **g, int p
 	delete[] temp;
 }
 
-void construct_radiance_map( int img_size, int pic_count, int offset, double *response_curve, uint8_t *img_list, int *exposure_log2, int *w, float *ln_E ){
+void construct_radiance_map( int img_size, int pic_count, int offset, double *g, uint8_t *Z, int *ln_t, int *w, float *ln_E ){
 	float acc_E[ img_size ]={0};
 	for( int i = 0; i < img_size; ++i ){
 		float acc_w = 0;
 		for( int j = 0; j < pic_count; ++j ){
-			uint8_t z = img_list[ j * img_size + i ];
-			acc_E[ i ] += w[ z ]*( response_curve[ z ] - exposure_log2[ j ] );
+			uint8_t z = Z[ j * img_size + i ];
+			acc_E[ i ] += w[ z ]*( g[ z ] - ln_t[ j ] );
 			acc_w += w[ z ];
 		}
 		//cout << i << " : " << acc_E[ i ] << " " << acc_w << endl;
-		ln_E[ i + offset ] = ( acc_w > 0 )? ( acc_E[ i ] / acc_w ) : ( acc_E[i] ); // may need to add exp here
+		ln_E[ i * 3 + offset ] = ( acc_w > 0 )? exp( acc_E[ i ] / acc_w ) : exp( acc_E[i] ); // may need to add exp here
 		acc_w = 0;
 	}
 }
@@ -190,7 +190,61 @@ int main( int argc, char* argv[] ){
 	response_curve_solver( small_r, exposure_log2, CONSTANTL, w, &gr, pic_count );
 
 	cout << "done" << endl;
+	
+	/* ------------ solve response curves ------------ */
+	unsigned img_size = row * col;
+	float hdr[ img_size * 3 ] = {0};
+	cout << "Constructing radiance map for Blue channel .... " << endl;
+	construct_radiance_map( img_size, pic_count, 0, gb, img_list_b, exposure_log2, w, hdr );
+	cout << "Constructing radiance map for Green channel .... " << endl;
+	construct_radiance_map( img_size, pic_count, 1, gg, img_list_g, exposure_log2, w, hdr );
+	cout << "Constructing radiance map for Red channel .... " << endl;
+	construct_radiance_map( img_size, pic_count, 2, gr, img_list_r, exposure_log2, w, hdr );
+	cout << "done" << endl;
 
+	/* ------------ Saving HDR image ------------ */
+	ofstream f;
+	f.open( output_name, ios::out | ios::binary );
+	if( f.is_open() ){
+		{
+		string buffer = "#?RADIANCE\n# Made C++\nFORMAT=32-bit_rle_rgbe\n\n";
+		f.write( buffer.c_str(), buffer.size() );
+		}
+		{
+		string buffer = "";
+		buffer.append( "-Y " ).append( to_string( row ) ).append( " +X " ).append( to_string( col ) ).append( "\n" );
+		f.write( buffer.c_str(), buffer.size() );
+		}
+
+		// find max bright value
+		cout << img_size << endl;
+		//uint8_t rbge[ img_size * 4 ] = {0};
+		for( unsigned i = 0; i < img_size; ++i ){
+			float brightest;
+			float mantissa;
+			int exponent;
+			//cout << hdr[ i * 3 ] << " " << hdr[ i * 3 + 1 ] << " " << hdr[ i * 3 + 2 ] << " " << endl;
+			brightest = hdr[ i * 3 ];
+			if( brightest < hdr[ i * 3 + 1 ] ) brightest = hdr[ i * 3 + 1 ];
+			if( brightest < hdr[ i * 3 + 2 ] ) brightest = hdr[ i * 3 + 2 ];
+			mantissa = frexpf( brightest, &exponent );
+			// reuse mantissa for scaled mantissa
+			mantissa = mantissa * 256.0 / brightest;
+			//rbge[ i * 4 + 0 ] = ( uint8_t )round( hdr[ i * 3 + 2 ] * mantissa[i] );
+			//rbge[ i * 4 + 1 ] = ( uint8_t )round( hdr[ i * 3 + 1 ] * mantissa[i] );
+			//rbge[ i * 4 + 2 ] = ( uint8_t )round( hdr[ i * 3 + 0 ] * mantissa[i] );
+			//rbge[ i * 4 + 3 ] = ( uint8_t )round( exponent[i] + 128 );
+			f.put( ( uint8_t )round( hdr[ i * 3 + 2 ] * mantissa ) );
+			f.put( ( uint8_t )round( hdr[ i * 3 + 1 ] * mantissa ) );
+			f.put( ( uint8_t )round( hdr[ i * 3 + 0 ] * mantissa ) );
+			f.put( ( uint8_t )round( exponent + 128 ) );
+		}
+	}
+	else{
+		cout << "Error creating file" << endl;
+	}
+	f.close();
+	
 	delete[] img_list_b;
 	delete[] img_list_g;
 	delete[] img_list_r;
