@@ -17,6 +17,7 @@
 #define CONSTANTL 50
 #define SMALLDIM 10
 #define SMALLPIXELS 100
+#define TILESIZE 4
 
 using namespace std;
 using namespace cv;
@@ -84,7 +85,7 @@ void load_exposures( string source_dir, uint8_t **img_list_b, uint8_t **img_list
 	return;
 }
 
-void response_curve_solver( uint8_t *Z, int *B, int l, int *w, double **g, int pic_count ){
+void response_curve_solver( uint8_t *Z, int *B, int l, uint8_t *w, double **g, int pic_count ){
 	int n = 256;
 	const unsigned  width_a = SMALLPIXELS + n;
 	const unsigned height_a = pic_count * SMALLPIXELS + n + 1;
@@ -132,16 +133,21 @@ void response_curve_solver( uint8_t *Z, int *B, int l, int *w, double **g, int p
 	delete[] temp;
 }
 
-void construct_radiance_map( int img_size, int pic_count, int offset, double *g, uint8_t *Z, int *ln_t, int *w, float *ln_E ){
+void construct_radiance_map( int img_size, int pic_count, int offset, double *g, uint8_t *Z, int *ln_t, uint8_t *w, float *ln_E ){
 	float acc_E[ img_size ]={0};
-	for( int i = 0; i < img_size; ++i ){
-		float acc_w = 0;
+	for( int i = 0; i < img_size; i += TILESIZE ){
+		float acc_w[ TILESIZE ] = {0};
 		for( int j = 0; j < pic_count; ++j ){
-			uint8_t z = Z[ j * img_size + i ];
-			acc_E[ i ] += w[ z ]*( g[ z ] - ln_t[ j ] );
-			acc_w += w[ z ];
+			uint8_t z[ TILESIZE ];
+			memcpy( z, Z + j * img_size + i, TILESIZE * sizeof( uint8_t ) );
+			for( int k = 0; k < TILESIZE; ++k ){
+				acc_E[ i + k ] += w[ z[ k ] ] * ( g[ z[ k ] ] - ln_t[ j ] );
+				acc_w[ k ]     += w[ z[ k ] ];
 		}
-		ln_E[ i * 3 + offset ] = ( acc_w > 0 )? exp( acc_E[ i ] / acc_w ) : exp( acc_E[i] );
+		}
+		for( int k = 0; k < TILESIZE; ++k ){
+			ln_E[ ( i + k ) * 3 + offset ] = ( acc_w[ k ] > 0 )? exp( acc_E[ ( i + k ) ] / acc_w[ k ] ) : exp( acc_E[ ( i + k ) ] );
+		}
 	}
 }
 
@@ -177,7 +183,7 @@ int main( int argc, char* argv[] ){
 	cout << "Solving response curves ... " << endl;
 	start = std::chrono::high_resolution_clock::now();
 
-	int *w = new int[ 256 ];
+	uint8_t *w = new uint8_t[ 256 ];
 	for( int i = 0; i < 128; ++i ){
 		w[       i ] = i;
 		w[ i + 128 ] = 127 - i;
