@@ -17,7 +17,7 @@
 #define CONSTANTL 50
 #define SMALLDIM 10
 #define SMALLPIXELS 100
-#define TILESIZE 4
+#define TILESIZE 16
 
 using namespace std;
 using namespace cv;
@@ -119,7 +119,10 @@ void response_curve_solver( uint8_t *Z, int *B, int l, uint8_t *w, double **g, i
 	double *temp = new double[ height_a ];
 	double rcond = -1.0;
 	int rank, info;
+	auto start = std::chrono::high_resolution_clock::now();
 	info = LAPACKE_dgelsd( LAPACK_ROW_MAJOR, height_a, width_a, 1, A, width_a, b, 1, temp, rcond, &rank );
+	auto finish = std::chrono::high_resolution_clock::now();
+	//cout << "dgelsd done in : " << std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count() << "ns\n";
 	/* Check for convergence */
 	if( info > 0 ) {
 		cerr << "The algorithm computing SVD failed to converge;" << endl;
@@ -134,17 +137,69 @@ void response_curve_solver( uint8_t *Z, int *B, int l, uint8_t *w, double **g, i
 }
 
 void construct_radiance_map( int img_size, int pic_count, int offset, double *g, uint8_t *Z, int *ln_t, uint8_t *w, float *ln_E ){
-	float acc_E[ img_size ]={0};
+	float acc_E[ img_size ];
+
 	for( int i = 0; i < img_size; i += TILESIZE ){
-		float acc_w[ TILESIZE ] = {0};
+		float32x4_t neon_acc_w1 = vdupq_n_f32( 0.0 );
+		float32x4_t neon_acc_w2 = vdupq_n_f32( 0.0 );
+		float32x4_t neon_acc_w3 = vdupq_n_f32( 0.0 );
+		float32x4_t neon_acc_w4 = vdupq_n_f32( 0.0 );
+		float32x4_t neon_acc_E1 = vdupq_n_f32( 0.0 );
+		float32x4_t neon_acc_E2 = vdupq_n_f32( 0.0 );
+		float32x4_t neon_acc_E3 = vdupq_n_f32( 0.0 );
+		float32x4_t neon_acc_E4 = vdupq_n_f32( 0.0 );
+
+		float acc_w[ TILESIZE ];
+
 		for( int j = 0; j < pic_count; ++j ){
 			uint8_t z[ TILESIZE ];
 			memcpy( z, Z + j * img_size + i, TILESIZE * sizeof( uint8_t ) );
+
+			float    temp_w[ TILESIZE ];
+			float    temp_g[ TILESIZE ];
+
 			for( int k = 0; k < TILESIZE; ++k ){
-				acc_E[ i + k ] += w[ z[ k ] ] * ( g[ z[ k ] ] - ln_t[ j ] );
-				acc_w[ k ]     += w[ z[ k ] ];
+				   temp_w[ k ] = w[ z[ k ] ];
+				   temp_g[ k ] = g[ z[ k ] ];
 			}
+
+			float32x4_t neon_temp_w1    = vld1q_f32  ( temp_w );
+			float32x4_t neon_temp_w2    = vld1q_f32  ( temp_w + 4 );
+			float32x4_t neon_temp_w3    = vld1q_f32  ( temp_w + 8 );
+			float32x4_t neon_temp_w4    = vld1q_f32  ( temp_w + 12 );
+			float32x4_t neon_temp_g1    = vld1q_f32  ( temp_g );
+			float32x4_t neon_temp_g2    = vld1q_f32  ( temp_g + 4 );
+			float32x4_t neon_temp_g3    = vld1q_f32  ( temp_g + 8 );
+			float32x4_t neon_temp_g4    = vld1q_f32  ( temp_g + 12 );
+			float32x4_t neon_temp_ln_t  = vdupq_n_f32( ln_t[ j ] );
+
+			neon_temp_g1 = vsubq_f32( neon_temp_g1, neon_temp_ln_t );   // ( g[ z[ k ] ] - ln_t[ j ] )
+			neon_temp_g2 = vsubq_f32( neon_temp_g2, neon_temp_ln_t );   // ( g[ z[ k ] ] - ln_t[ j ] )
+			neon_temp_g3 = vsubq_f32( neon_temp_g3, neon_temp_ln_t );   // ( g[ z[ k ] ] - ln_t[ j ] )
+			neon_temp_g4 = vsubq_f32( neon_temp_g4, neon_temp_ln_t );   // ( g[ z[ k ] ] - ln_t[ j ] )
+			neon_temp_g1 = vmulq_f32( neon_temp_g1, neon_temp_w1 );     // w[ z[ k ] ] * ( g[ z[ k ] ] - ln_t[ j ] )
+			neon_temp_g2 = vmulq_f32( neon_temp_g2, neon_temp_w2 );     // w[ z[ k ] ] * ( g[ z[ k ] ] - ln_t[ j ] )
+			neon_temp_g3 = vmulq_f32( neon_temp_g3, neon_temp_w3 );     // w[ z[ k ] ] * ( g[ z[ k ] ] - ln_t[ j ] )
+			neon_temp_g4 = vmulq_f32( neon_temp_g4, neon_temp_w4 );     // w[ z[ k ] ] * ( g[ z[ k ] ] - ln_t[ j ] )
+
+			neon_acc_E1  = vaddq_f32( neon_temp_g1, neon_acc_E1 );      // acc_E[ i + k ] += w[ z[ k ] ] * ( g[ z[ k ] ] - ln_t[ j ] );
+			neon_acc_E2  = vaddq_f32( neon_temp_g2, neon_acc_E2 );      // acc_E[ i + k ] += w[ z[ k ] ] * ( g[ z[ k ] ] - ln_t[ j ] );
+			neon_acc_E3  = vaddq_f32( neon_temp_g3, neon_acc_E3 );      // acc_E[ i + k ] += w[ z[ k ] ] * ( g[ z[ k ] ] - ln_t[ j ] );
+			neon_acc_E4  = vaddq_f32( neon_temp_g4, neon_acc_E4 );      // acc_E[ i + k ] += w[ z[ k ] ] * ( g[ z[ k ] ] - ln_t[ j ] );
+			neon_acc_w1  = vaddq_f32( neon_temp_w1, neon_acc_w1 );      // acc_w[ k ]     += w[ z[ k ] ];
+			neon_acc_w2  = vaddq_f32( neon_temp_w2, neon_acc_w2 );      // acc_w[ k ]     += w[ z[ k ] ];
+			neon_acc_w3  = vaddq_f32( neon_temp_w3, neon_acc_w3 );      // acc_w[ k ]     += w[ z[ k ] ];
+			neon_acc_w4  = vaddq_f32( neon_temp_w4, neon_acc_w4 );      // acc_w[ k ]     += w[ z[ k ] ];
+
 		}
+		vst1q_f32 (     acc_E + i, neon_acc_E1 );
+		vst1q_f32 ( acc_E + i + 4, neon_acc_E2 );
+		vst1q_f32 ( acc_E + i + 8, neon_acc_E3 );
+		vst1q_f32 ( acc_E + i +12, neon_acc_E4 );
+		vst1q_f32 (         acc_w, neon_acc_w1 );
+		vst1q_f32 (     acc_w + 4, neon_acc_w2 );
+		vst1q_f32 (     acc_w + 8, neon_acc_w3 );
+		vst1q_f32 (    acc_w + 12, neon_acc_w4 );
 		for( int k = 0; k < TILESIZE; ++k ){
 			ln_E[ ( i + k ) * 3 + offset ] = ( acc_w[ k ] > 0 )? exp( acc_E[ ( i + k ) ] / acc_w[ k ] ) : exp( acc_E[ ( i + k ) ] );
 		}
@@ -152,6 +207,8 @@ void construct_radiance_map( int img_size, int pic_count, int offset, double *g,
 }
 
 int main( int argc, char* argv[] ){
+
+	cout << "Tile size = " << TILESIZE << endl;
 
 	/* ------------ variables ------------ */
 	uint8_t *img_list_b, *img_list_g, *img_list_r;
@@ -173,14 +230,14 @@ int main( int argc, char* argv[] ){
 	row = col = 0;
 
 	/* ------------ load picture and small reference input ------------ */
-	cout << "reading input images ... " << endl;
+	//cout << "reading input images ... " << endl;
 	auto start = std::chrono::high_resolution_clock::now();
 	load_exposures( img_dir, &img_list_b, &img_list_g, &img_list_r, &small_b, &small_g, &small_r, &exposure_log2, &row, &col, &pic_count );
 	auto finish = std::chrono::high_resolution_clock::now();
-	cout << "done in : " << std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count() << "ns\n";
+	//cout << "done in : " << std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count() << "ns\n";
 
 	/* ------------ solve response curves ------------ */
-	cout << "Solving response curves ... " << endl;
+	//cout << "Solving response curves ... " << endl;
 	start = std::chrono::high_resolution_clock::now();
 
 	uint8_t *w = new uint8_t[ 256 ];
@@ -194,24 +251,25 @@ int main( int argc, char* argv[] ){
 	response_curve_solver( small_r, exposure_log2, CONSTANTL, w, &gr, pic_count );
 
 	finish = std::chrono::high_resolution_clock::now();
-	cout << "done in : " << std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count() << "ns\n";
+	//cout << "done in : " << std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count() << "ns\n";
 
 	/* ------------ solve response curves ------------ */
 	start = std::chrono::high_resolution_clock::now();
 	unsigned img_size = row * col;
 	float hdr[ img_size * 3 ] = {0};
-	cout << "Constructing radiance map for Blue channel .... " << endl;
+	//cout << "Constructing radiance map for Blue channel .... " << endl;
 	construct_radiance_map( img_size, pic_count, 0, gb, img_list_b, exposure_log2, w, hdr );
-	cout << "Constructing radiance map for Green channel .... " << endl;
+	//cout << "Constructing radiance map for Green channel .... " << endl;
 	construct_radiance_map( img_size, pic_count, 1, gg, img_list_g, exposure_log2, w, hdr );
-	cout << "Constructing radiance map for Red channel .... " << endl;
+	//cout << "Constructing radiance map for Red channel .... " << endl;
 	construct_radiance_map( img_size, pic_count, 2, gr, img_list_r, exposure_log2, w, hdr );
 	finish = std::chrono::high_resolution_clock::now();
 	cout << "done in : " << std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count() << "ns\n";
 
-	start = std::chrono::high_resolution_clock::now();
-	cout << "Writing hdr image .... " << endl;
 	/* ------------ Saving HDR image ------------ */
+	start = std::chrono::high_resolution_clock::now();
+	//cout << "Writing hdr image .... " << endl;
+
 	ofstream f;
 	f.open( output_name, ios::out | ios::binary );
 	if( f.is_open() ){
@@ -248,7 +306,7 @@ int main( int argc, char* argv[] ){
 	}
 	f.close();
 	finish = std::chrono::high_resolution_clock::now();
-	cout << "done in : " << std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count() << "ns\n";
+	//cout << "done in : " << std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count() << "ns\n";
 
 	delete[] img_list_b;
 	delete[] img_list_g;
@@ -257,6 +315,7 @@ int main( int argc, char* argv[] ){
 	delete[] small_b;
 	delete[] small_g;
 	delete[] small_r;
+
 	delete[] gb;
 	delete[] gg;
 	delete[] gr;
