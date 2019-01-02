@@ -119,9 +119,9 @@ void response_curve_solver( uint8_t *Z, int *B, int l, uint8_t *w, double **g, i
 	double *temp = new double[ height_a ];
 	double rcond = -1.0;
 	int rank, info;
-	auto start = std::chrono::high_resolution_clock::now();
+	//auto start = std::chrono::high_resolution_clock::now();
 	info = LAPACKE_dgelsd( LAPACK_ROW_MAJOR, height_a, width_a, 1, A, width_a, b, 1, temp, rcond, &rank );
-	auto finish = std::chrono::high_resolution_clock::now();
+	//auto finish = std::chrono::high_resolution_clock::now();
 	//cout << "dgelsd done in : " << std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count() << "ns\n";
 	/* Check for convergence */
 	if( info > 0 ) {
@@ -137,15 +137,11 @@ void response_curve_solver( uint8_t *Z, int *B, int l, uint8_t *w, double **g, i
 }
 
 void construct_radiance_map( int img_size, int pic_count, int offset, double *g, uint8_t *Z, int *ln_t, uint8_t *w, float *ln_E ){
-	float acc_E[ img_size ];
-	
 	for( int i = 0; i < img_size; i += TILESIZE ){
 		float32x4_t neon_acc_w1 = vdupq_n_f32( 0.0 );
 		float32x4_t neon_acc_w2 = vdupq_n_f32( 0.0 );
 		float32x4_t neon_acc_E1 = vdupq_n_f32( 0.0 );
 		float32x4_t neon_acc_E2 = vdupq_n_f32( 0.0 );
-		
-		float acc_w[ TILESIZE ];
 		
 		for( int j = 0; j < pic_count; ++j ){
 			uint8_t z[ TILESIZE ];
@@ -175,10 +171,12 @@ void construct_radiance_map( int img_size, int pic_count, int offset, double *g,
 			neon_acc_w2  = vaddq_f32( neon_temp_w2, neon_acc_w2 );      // acc_w[ k ]     += w[ z[ k ] ];
 			
 		}
-		vst1q_f32 (     acc_E + i, neon_acc_E1 );
-		vst1q_f32 ( acc_E + i + 4, neon_acc_E2 );
-		vst1q_f32 (         acc_w, neon_acc_w1 );
-		vst1q_f32 (     acc_w + 4, neon_acc_w2 );
+		float acc_E[ TILESIZE ];
+		float acc_w[ TILESIZE ];
+		vst1q_f32 (     acc_E, neon_acc_E1 );
+		vst1q_f32 ( acc_E + 4, neon_acc_E2 );
+		vst1q_f32 (     acc_w, neon_acc_w1 );
+		vst1q_f32 ( acc_w + 4, neon_acc_w2 );
 		for( int k = 0; k < TILESIZE; ++k ){
 			ln_E[ ( i + k ) * 3 + offset ] = ( acc_w[ k ] > 0 )? exp( acc_E[ ( i + k ) ] / acc_w[ k ] ) : exp( acc_E[ ( i + k ) ] );
 		}
@@ -187,7 +185,7 @@ void construct_radiance_map( int img_size, int pic_count, int offset, double *g,
 
 int main( int argc, char* argv[] ){
 
-	cout << "Tile size = " << TILESIZE << endl;
+	//cout << "Tile size = " << TILESIZE << endl;
 
 	/* ------------ variables ------------ */
 	uint8_t *img_list_b, *img_list_g, *img_list_r;

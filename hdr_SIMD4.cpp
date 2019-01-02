@@ -137,8 +137,6 @@ void response_curve_solver( uint8_t *Z, int *B, int l, uint8_t *w, double **g, i
 }
 
 void construct_radiance_map( int img_size, int pic_count, int offset, double *g, uint8_t *Z, int *ln_t, uint8_t *w, float *ln_E ){
-	float acc_E[ img_size ];
-	
 	/* debug start
 	float acc_E_debug[ img_size ] = {0};
 	/*  debug end */
@@ -146,8 +144,6 @@ void construct_radiance_map( int img_size, int pic_count, int offset, double *g,
 	for( int i = 0; i < img_size; i += TILESIZE ){
 		float32x4_t neon_acc_w = vdupq_n_f32( 0.0 );
 		float32x4_t neon_acc_E = vdupq_n_f32( 0.0 ); // load acc_E
-		
-		float acc_w[ TILESIZE ];
 		
 		/* debug start
 		float acc_w_debug[ TILESIZE ] = {0};
@@ -195,10 +191,12 @@ void construct_radiance_map( int img_size, int pic_count, int offset, double *g,
 			/* debug end */
 			
 		}
-		vst1q_f32 ( acc_E + i, neon_acc_E );
-		vst1q_f32 (     acc_w, neon_acc_w );
+		float acc_E[ TILESIZE ];
+		float acc_w[ TILESIZE ];
+		vst1q_f32 ( acc_E, neon_acc_E );
+		vst1q_f32 ( acc_w, neon_acc_w );
 		for( int k = 0; k < TILESIZE; ++k ){
-			ln_E[ ( i + k ) * 3 + offset ] = ( acc_w[ k ] > 0 )? exp( acc_E[ ( i + k ) ] / acc_w[ k ] ) : exp( acc_E[ ( i + k ) ] );
+			ln_E[ ( i + k ) * 3 + offset ] = ( acc_w[ k ] > 0 )? exp( acc_E[ ( k ) ] / acc_w[ k ] ) : exp( acc_E[ ( k ) ] );
 		}
 	}
 }

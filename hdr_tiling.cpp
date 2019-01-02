@@ -136,7 +136,7 @@ void response_curve_solver( uint8_t *Z, int *B, int l, uint8_t *w, double **g, i
 void construct_radiance_map( int img_size, int pic_count, int offset, double *g, uint8_t *Z, int *ln_t, uint8_t *w, float *ln_E ){
 	for( int i = 0; i < img_size; i += TILESIZE ){
 		float acc_w[ TILESIZE ] = {0};
-		float acc_E[ TILESIZE ]={0};
+		float acc_E[ TILESIZE ] = {0};
 		for( int j = 0; j < pic_count; ++j ){
 			uint8_t z[ TILESIZE ];
 			memcpy( z, Z + j * img_size + i, TILESIZE * sizeof( uint8_t ) );

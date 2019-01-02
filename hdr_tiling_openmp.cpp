@@ -17,7 +17,7 @@
 #define CONSTANTL 50
 #define SMALLDIM 10
 #define SMALLPIXELS 100
-#define TILESIZE 4
+#define TILESIZE 1
 
 using namespace std;
 using namespace cv;
@@ -137,7 +137,7 @@ void construct_radiance_map( int img_size, int pic_count, int offset, double *g,
 	#pragma omp parallel for
 	for( int i = 0; i < img_size; i += TILESIZE ){
 		float acc_w[ TILESIZE ] = {0};
-		float acc_E[ TILESIZE ]={0};
+		float acc_E[ TILESIZE ] = {0};
 		for( int j = 0; j < pic_count; ++j ){
 			uint8_t z[ TILESIZE ];
 			memcpy( z, Z + j * img_size + i, TILESIZE * sizeof( uint8_t ) );
