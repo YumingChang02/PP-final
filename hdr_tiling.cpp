@@ -134,19 +134,19 @@ void response_curve_solver( uint8_t *Z, int *B, int l, uint8_t *w, double **g, i
 }
 
 void construct_radiance_map( int img_size, int pic_count, int offset, double *g, uint8_t *Z, int *ln_t, uint8_t *w, float *ln_E ){
-	float acc_E[ img_size ]={0};
 	for( int i = 0; i < img_size; i += TILESIZE ){
 		float acc_w[ TILESIZE ] = {0};
+		float acc_E[ TILESIZE ]={0};
 		for( int j = 0; j < pic_count; ++j ){
 			uint8_t z[ TILESIZE ];
 			memcpy( z, Z + j * img_size + i, TILESIZE * sizeof( uint8_t ) );
 			for( int k = 0; k < TILESIZE; ++k ){
-				acc_E[ i + k ] += w[ z[ k ] ] * ( g[ z[ k ] ] - ln_t[ j ] );
-				acc_w[ k ]     += w[ z[ k ] ];
+				acc_E[ k ] += w[ z[ k ] ] * ( g[ z[ k ] ] - ln_t[ j ] );
+				acc_w[ k ] += w[ z[ k ] ];
 			}
 		}
 		for( int k = 0; k < TILESIZE; ++k ){
-			ln_E[ ( i + k ) * 3 + offset ] = ( acc_w[ k ] > 0 )? exp( acc_E[ ( i + k ) ] / acc_w[ k ] ) : exp( acc_E[ ( i + k ) ] );
+			ln_E[ ( i + k ) * 3 + offset ] = ( acc_w[ k ] > 0 )? exp( acc_E[ ( k ) ] / acc_w[ k ] ) : exp( acc_E[ ( k ) ] );
 		}
 	}
 }

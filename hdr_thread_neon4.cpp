@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <cstring>
 #include <sstream>
+#include <thread>
 #include <chrono>
 #include <limits>
 #include <vector>
@@ -133,19 +134,36 @@ void response_curve_solver( uint8_t *Z, int *B, int l, uint8_t *w, double **g, i
 	delete[] temp;
 }
 
-void construct_radiance_map( int img_size, int pic_count, int offset, double *g, uint8_t *Z, int *ln_t, uint8_t *w, float *ln_E ){
-	#pragma omp parallel for
-	for( int i = 0; i < img_size; i += TILESIZE ){
-		float acc_w[ TILESIZE ] = {0};
-		float acc_E[ TILESIZE ]={0};
+void construct_radiance_map( int img_size, int pic_count, int offset, uint8_t thread_count, uint8_t thread_id, double *g, uint8_t *Z, int *ln_t, uint8_t *w, float *ln_E ){
+	for( int i = TILESIZE * thread_id; i < img_size; i += TILESIZE * thread_count ){
+		float32x4_t neon_acc_w1 = vdupq_n_f32( 0.0 );
+		float32x4_t neon_acc_E1 = vdupq_n_f32( 0.0 );
 		for( int j = 0; j < pic_count; ++j ){
 			uint8_t z[ TILESIZE ];
 			memcpy( z, Z + j * img_size + i, TILESIZE * sizeof( uint8_t ) );
+
+			float    temp_w[ TILESIZE ];
+			float    temp_g[ TILESIZE ];
+
 			for( int k = 0; k < TILESIZE; ++k ){
-				acc_E[ k ] += w[ z[ k ] ] * ( g[ z[ k ] ] - ln_t[ j ] );
-				acc_w[ k ] += w[ z[ k ] ];
+				   temp_w[ k ] = w[ z[ k ] ];
+				   temp_g[ k ] = g[ z[ k ] ];
 			}
+
+			float32x4_t neon_temp_w1    = vld1q_f32  ( temp_w );
+			float32x4_t neon_temp_g1    = vld1q_f32  ( temp_g );
+			float32x4_t neon_temp_ln_t  = vdupq_n_f32( ln_t[ j ] );
+
+			neon_temp_g1 = vsubq_f32( neon_temp_g1, neon_temp_ln_t );   // ( g[ z[ k ] ] - ln_t[ j ] )
+			neon_temp_g1 = vmulq_f32( neon_temp_g1, neon_temp_w1 );     // w[ z[ k ] ] * ( g[ z[ k ] ] - ln_t[ j ] )
+
+			neon_acc_E1  = vaddq_f32( neon_temp_g1, neon_acc_E1 );      // acc_E[ i + k ] += w[ z[ k ] ] * ( g[ z[ k ] ] - ln_t[ j ] );
+			neon_acc_w1  = vaddq_f32( neon_temp_w1, neon_acc_w1 );      // acc_w[ k ]     += w[ z[ k ] ];
 		}
+		float acc_w[ TILESIZE ] = {0};
+		float acc_E[ TILESIZE ] = {0};
+		vst1q_f32 (       acc_E, neon_acc_E1 );
+		vst1q_f32 (       acc_w, neon_acc_w1 );
 		for( int k = 0; k < TILESIZE; ++k ){
 			ln_E[ ( i + k ) * 3 + offset ] = ( acc_w[ k ] > 0 )? exp( acc_E[ ( k ) ] / acc_w[ k ] ) : exp( acc_E[ ( k ) ] );
 		}
@@ -162,12 +180,13 @@ int main( int argc, char* argv[] ){
 	int *exposure_log2;
 	unsigned row, col, pic_count;
 
-	if( argc != 3 ){
-		cerr << "[Usage] hdr <input img dir> <output .hdr name> \n[Example] hdr taipei taipei.hdr" << endl;
+	if( argc != 4 ){
+		cerr << "[Usage] hdr <input img dir> <output .hdr name> <thread count> \n[Example] hdr taipei taipei.hdr" << endl;
 		return 0;
 	}
 	string img_dir = argv[1];
 	string output_name = argv[2];
+	uint8_t thread_total = atoi( argv[3] );
 
 	/* ------------ count pictures in folder ------------ */
 
@@ -200,13 +219,36 @@ int main( int argc, char* argv[] ){
 	/* ------------ solve response curves ------------ */
 	start = std::chrono::high_resolution_clock::now();
 	unsigned img_size = row * col;
-	float hdr[ img_size * 3 ] = {0};
+	float *hdr = new float[ img_size * 3 ];
+	std::thread threads[thread_total];
+	
 	cout << "Constructing radiance map for Blue channel .... " << endl;
-	construct_radiance_map( img_size, pic_count, 0, gb, img_list_b, exposure_log2, w, hdr );
+	for( uint8_t i = 0; i < thread_total; ++i ){
+		threads[i] = std::thread( construct_radiance_map, img_size, pic_count, 0, thread_total, i, gb, img_list_b, exposure_log2, w, hdr );
+	}
+	
+	for (auto& t: threads) {
+		t.join();
+	}
+	
 	cout << "Constructing radiance map for Green channel .... " << endl;
-	construct_radiance_map( img_size, pic_count, 1, gg, img_list_g, exposure_log2, w, hdr );
+	for( uint8_t i = 0; i < thread_total; ++i ){
+		threads[i] = std::thread( construct_radiance_map, img_size, pic_count, 1, thread_total, i, gg, img_list_g, exposure_log2, w, hdr );
+	}
+	
+	for (auto& t: threads) {
+		t.join();
+	}
+
 	cout << "Constructing radiance map for Red channel .... " << endl;
-	construct_radiance_map( img_size, pic_count, 2, gr, img_list_r, exposure_log2, w, hdr );
+	for( uint8_t i = 0; i < thread_total; ++i ){
+		threads[i] = std::thread( construct_radiance_map, img_size, pic_count, 2, thread_total, i, gr, img_list_r, exposure_log2, w, hdr );
+	}
+	
+	for (auto& t: threads) {
+		t.join();
+	}
+
 	finish = std::chrono::high_resolution_clock::now();
 	cout << "done in : " << std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count() << "ns\n";
 
@@ -265,4 +307,6 @@ int main( int argc, char* argv[] ){
 	delete[] exposure_log2;
 
 	delete[] w;
+
+	delete[] hdr;
 }
